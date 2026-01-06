@@ -1,4 +1,4 @@
-iimport { default as AsyncStorage } from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = 'token';
 const USER_ID_KEY = 'userId';
