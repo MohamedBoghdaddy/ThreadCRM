@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "ThreadCRM",
+    "slug": "threadcrm",
+    "scheme": "threadcrm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "plugins": ["expo-router"],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
