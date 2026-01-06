@@ -1,69 +1,88 @@
-import React, { useState } from 'react';
-import { View, TextInput, Text, Pressable, Alert } from 'react-native';
-import { styled } from 'nativewind';
-import { router } from 'expo-router';
-import { login } from '../../src/api/auth';
-import { saveToken, saveUserId } from '../../src/store/authStore';
+import "../../global.css";
 
-// Styled components for the login screen
-const Container = styled(View);
-const Title = styled(Text);
-const Input = styled(TextInput);
-const Button = styled(Pressable);
-const LinkButton = styled(Pressable);
+import React, { useState } from "react";
+import { View, TextInput, Text, Pressable, Alert } from "react-native";
+import { useRouter } from "expo-router";
+
+import { login as loginUser } from "../../src/api/auth";
+import { saveToken, saveUserId } from "../../src/store/authStore";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert("Missing info", "Please enter email and password.");
+      return;
+    }
+
     try {
       setLoading(true);
-      const { token, user } = await login({ email, password });
+
+      const { token, user } = await loginUser({
+        email: email.trim(),
+        password,
+      });
+
       await saveToken(token);
-      await saveUserId(user.id);
-      router.replace('/(tabs)/home');
-    } catch (err) {
-      Alert.alert('Login failed', err?.response?.data?.message || 'Error');
+
+      const userId = user?._id || user?.id;
+      if (userId) await saveUserId(userId);
+
+      router.replace("/(tabs)/home");
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Invalid email or password";
+      Alert.alert("Login failed", msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container className="flex-1 justify-center p-4 bg-white">
-      <Title className="text-2xl font-bold mb-6">Login</Title>
-      <Input
+    <View className="flex-1 justify-center px-6 bg-white">
+      <Text className="text-2xl font-bold mb-6 text-center">Login</Text>
+
+      <TextInput
         value={email}
         onChangeText={setEmail}
         placeholder="Email"
         autoCapitalize="none"
         keyboardType="email-address"
-        className="border border-gray-300 rounded-md p-3 mb-3"
+        className="border border-gray-300 rounded-md px-4 py-3 mb-3"
       />
-      <Input
+
+      <TextInput
         value={password}
         onChangeText={setPassword}
         placeholder="Password"
         secureTextEntry
-        className="border border-gray-300 rounded-md p-3 mb-4"
+        className="border border-gray-300 rounded-md px-4 py-3 mb-4"
       />
-      <Button
+
+      <Pressable
         onPress={handleLogin}
         disabled={loading}
-        className={`rounded-md p-3 ${loading ? 'bg-gray-400' : 'bg-blue-600'}`}
+        className={`rounded-md py-3 ${loading ? "bg-gray-400" : "bg-black"}`}
       >
         <Text className="text-white text-center font-medium">
-          {loading ? 'Loading...' : 'Login'}
+          {loading ? "Loading..." : "Login"}
         </Text>
-      </Button>
-      <LinkButton
+      </Pressable>
+
+      <Pressable
         className="mt-4"
-        onPress={() => router.push('/(auth)/register')}
+        onPress={() => router.push("/(auth)/register")}
+        disabled={loading}
       >
-        <Text className="text-blue-600 text-center">Create Account</Text>
-      </LinkButton>
-    </Container>
+        <Text className="text-blue-600 text-center">Create a new account</Text>
+      </Pressable>
+    </View>
   );
 }
