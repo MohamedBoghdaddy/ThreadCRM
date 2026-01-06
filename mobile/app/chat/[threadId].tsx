@@ -1,90 +1,125 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, TextInput, FlatList, Text, Pressable, Alert } from 'react-native';
-import { styled } from 'nativewind';
-import { useLocalSearchParams } from 'expo-router';
-import { socket } from '../../src/realtime/socket';
-import { getMessages } from '../../src/api/chat';
-import { getUserId } from '../../src/store/authStore';
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import {
+  View,
+  TextInput,
+  FlatList,
+  Text,
+  Pressable,
+  Alert,
+} from "react-native";
+import { useLocalSearchParams } from "expo-router";
 
-// Styled components for the chat room
-const Container = styled(View);
-const MsgContainer = styled(View);
-const MsgText = styled(Text);
-const Timestamp = styled(Text);
-const Input = styled(TextInput);
-const SendButton = styled(Pressable);
+import { getSocket } from "../../src/realtime/socket";
+import { getMessages } from "../../src/api/chat";
+import { getUserId } from "../../src/store/authStore";
+
+type ChatMessage = {
+  _id: string;
+  text: string;
+  createdAt: string;
+  senderId?: string;
+};
 
 export default function ChatRoom() {
   const { threadId } = useLocalSearchParams<{ threadId: string }>();
-  const [text, setText] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
+  const id = useMemo(
+    () => (typeof threadId === "string" ? threadId : ""),
+    [threadId]
+  );
+
+  const [text, setText] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const loadMessages = useCallback(async () => {
-    if (!threadId) return;
+    if (!id) return;
     try {
-      const list = await getMessages(threadId);
-      setMessages(list);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to load messages');
+      const list = await getMessages(id);
+      setMessages(Array.isArray(list) ? list : []);
+    } catch {
+      Alert.alert("Error", "Failed to load messages");
     }
-  }, [threadId]);
+  }, [id]);
 
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!id) return;
 
-    socket.emit('joinThread', threadId);
+    const socket = getSocket();
+    if (!socket) return; // web: sockets disabled
 
-    const handler = (msg: any) => setMessages((prev) => [...prev, msg]);
-    socket.on('newMessage', handler);
+    socket.emit("joinThread", id);
+
+    const handler = (msg: ChatMessage) => {
+      setMessages((prev) => [...prev, msg]);
+    };
+
+    socket.on("newMessage", handler);
 
     return () => {
-      socket.off('newMessage', handler);
-      socket.emit('leaveThread', threadId);
+      socket.off("newMessage", handler);
+      socket.emit("leaveThread", id);
     };
-  }, [threadId]);
+  }, [id]);
 
   const send = async () => {
-    if (!text.trim() || !threadId) return;
+    if (!text.trim() || !id) return;
+
     try {
+      const socket = getSocket();
+      if (!socket) {
+        Alert.alert("Web limitation", "Realtime chat is disabled on web.");
+        return;
+      }
+
       const senderId = await getUserId();
-      socket.emit('sendMessage', { threadId, senderId, text });
-      setText('');
-    } catch (err) {
-      Alert.alert('Error', 'Failed to send message');
+
+      socket.emit("sendMessage", {
+        threadId: id,
+        senderId,
+        text: text.trim(),
+      });
+
+      setText("");
+    } catch {
+      Alert.alert("Error", "Failed to send message");
     }
   };
 
   return (
-    <Container className="flex-1 p-3 bg-white">
+    <View className="flex-1 p-3 bg-white">
       <FlatList
         data={messages}
         keyExtractor={(item) => item._id}
+        contentContainerStyle={{ paddingBottom: 8 }}
         renderItem={({ item }) => (
-          <MsgContainer className="mb-2">
-            <MsgText>{item.text}</MsgText>
-            <Timestamp className="text-xs text-gray-500">
-              {new Date(item.createdAt).toLocaleString()}
-            </Timestamp>
-          </MsgContainer>
+          <View className="mb-2">
+            <Text className="text-base">{item.text}</Text>
+            <Text className="text-xs text-gray-500">
+              {item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}
+            </Text>
+          </View>
         )}
       />
-      <Input
+
+      <TextInput
         value={text}
         onChangeText={setText}
         placeholder="Message..."
-        className="border border-gray-300 rounded-md p-2 my-2"
+        className="border border-gray-300 rounded-md px-3 py-2 my-2"
       />
-      <SendButton
-        className={`rounded-md p-3 ${text.trim() ? 'bg-blue-600' : 'bg-gray-300'}`}
+
+      <Pressable
+        className={`rounded-md p-3 ${
+          text.trim() ? "bg-blue-600" : "bg-gray-300"
+        }`}
         onPress={send}
         disabled={!text.trim()}
       >
         <Text className="text-white text-center font-medium">Send</Text>
-      </SendButton>
-    </Container>
+      </Pressable>
+    </View>
   );
 }
