@@ -1,32 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TextInput, Pressable, Alert } from 'react-native';
-import { styled } from 'nativewind';
-import { getDashboard, getLeads, createLead } from '../../src/api/crm';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  TextInput,
+  Pressable,
+  Alert,
+} from "react-native";
+import { getDashboard, getLeads, createLead } from "../../src/api/crm";
 
-// Styled components using NativeWind for consistent styling
-const Container = styled(View);
-const Title = styled(Text);
-const Section = styled(View);
-const StatText = styled(Text);
-const Input = styled(TextInput);
-const Button = styled(Pressable);
+type Dashboard = {
+  totalLeads?: number;
+  hotLeads?: number;
+};
+
+type Lead = {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  status?: string;
+};
 
 export default function CRMScreen() {
-  const [dashboard, setDashboard] = useState<any>(null);
-  const [leads, setLeads] = useState<any[]>([]);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [leadName, setLeadName] = useState('');
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
+
+  const [leadName, setLeadName] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadData = async () => {
     try {
+      setRefreshing(true);
       const [dash, list] = await Promise.all([getDashboard(), getLeads()]);
-      setDashboard(dash);
-      setLeads(list);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to load CRM data');
+      setDashboard(dash || null);
+      setLeads(Array.isArray(list) ? list : []);
+    } catch {
+      Alert.alert("Error", "Failed to load CRM data");
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -35,83 +52,114 @@ export default function CRMScreen() {
   }, []);
 
   const addLead = async () => {
+    if (!leadName.trim()) {
+      Alert.alert("Missing info", "Lead name is required.");
+      return;
+    }
+
     try {
       setLoading(true);
+
       await createLead({
-        name: leadName,
-        email: leadEmail,
-        phone: leadPhone
+        name: leadName.trim(),
+        email: leadEmail.trim() || undefined,
+        phone: leadPhone.trim() || undefined,
       });
-      setLeadName('');
-      setLeadEmail('');
-      setLeadPhone('');
+
+      setLeadName("");
+      setLeadEmail("");
+      setLeadPhone("");
       setShowForm(false);
-      loadData();
-    } catch (err) {
-      Alert.alert('Error', 'Failed to add lead');
+
+      await loadData();
+    } catch {
+      Alert.alert("Error", "Failed to add lead");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container className="flex-1 p-4 bg-white">
-      <Title className="text-2xl font-bold mb-4">CRM Dashboard</Title>
+    <View className="flex-1 p-4 bg-white">
+      <Text className="text-2xl font-bold mb-4">CRM Dashboard</Text>
+
       {dashboard && (
-        <Section className="mb-4">
-          <StatText>Total Leads: {dashboard.totalLeads}</StatText>
-          <StatText>Hot Leads: {dashboard.hotLeads}</StatText>
-        </Section>
+        <View className="mb-4">
+          <Text className="text-gray-900">
+            Total Leads: {dashboard.totalLeads ?? 0}
+          </Text>
+          <Text className="text-gray-900">
+            Hot Leads: {dashboard.hotLeads ?? 0}
+          </Text>
+        </View>
       )}
-      <Button
-        className="bg-blue-600 rounded-md px-4 py-2 mb-4 w-fit"
-        onPress={() => setShowForm(!showForm)}
+
+      <Pressable
+        className="bg-blue-600 rounded-md px-4 py-2 mb-4 self-start"
+        onPress={() => setShowForm((v) => !v)}
       >
-        <Text className="text-white">{showForm ? 'Cancel' : 'Add Lead'}</Text>
-      </Button>
+        <Text className="text-white">{showForm ? "Cancel" : "Add Lead"}</Text>
+      </Pressable>
+
       {showForm && (
-        <Section className="mb-4">
-          <Input
+        <View className="mb-4">
+          <TextInput
             value={leadName}
             onChangeText={setLeadName}
             placeholder="Name"
-            className="border border-gray-300 rounded-md p-2 mb-2"
+            className="border border-gray-300 rounded-md px-3 py-2 mb-2"
           />
-          <Input
+
+          <TextInput
             value={leadEmail}
             onChangeText={setLeadEmail}
             placeholder="Email"
             keyboardType="email-address"
-            className="border border-gray-300 rounded-md p-2 mb-2"
+            autoCapitalize="none"
+            className="border border-gray-300 rounded-md px-3 py-2 mb-2"
           />
-          <Input
+
+          <TextInput
             value={leadPhone}
             onChangeText={setLeadPhone}
             placeholder="Phone"
             keyboardType="phone-pad"
-            className="border border-gray-300 rounded-md p-2 mb-2"
+            className="border border-gray-300 rounded-md px-3 py-2 mb-3"
           />
-          <Button
-            className={`rounded-md px-4 py-2 ${loading ? 'bg-gray-400' : 'bg-green-600'}`}
+
+          <Pressable
+            className={`rounded-md px-4 py-2 ${
+              loading ? "bg-gray-400" : "bg-green-600"
+            }`}
             onPress={addLead}
             disabled={loading}
           >
-            <Text className="text-white">{loading ? 'Saving...' : 'Save Lead'}</Text>
-          </Button>
-        </Section>
+            <Text className="text-white text-center">
+              {loading ? "Saving..." : "Save Lead"}
+            </Text>
+          </Pressable>
+        </View>
       )}
+
       <FlatList
         data={leads}
         keyExtractor={(item) => item._id}
+        refreshing={refreshing}
+        onRefresh={loadData}
+        ListEmptyComponent={
+          !refreshing ? (
+            <Text className="text-gray-500 mt-2">No leads yet.</Text>
+          ) : null
+        }
         renderItem={({ item }) => (
-          <Section className="border-b border-gray-200 py-3">
+          <View className="border-b border-gray-200 py-3">
             <Text className="font-bold">{item.name}</Text>
-            {item.email ? <Text>{item.email}</Text> : null}
-            {item.phone ? <Text>{item.phone}</Text> : null}
-            <Text>Status: {item.status}</Text>
-          </Section>
+            {!!item.email && <Text>{item.email}</Text>}
+            {!!item.phone && <Text>{item.phone}</Text>}
+            <Text>Status: {item.status || "—"}</Text>
+          </View>
         )}
       />
-    </Container>
+    </View>
   );
 }
