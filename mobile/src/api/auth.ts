@@ -1,3 +1,4 @@
+// src/api/auth.ts
 import { api } from "./client";
 
 interface LoginPayload {
@@ -19,8 +20,11 @@ interface AuthResponse {
   data?: any;
 }
 
+/**
+ * Normalize whatever the backend returns into:
+ *   { token, user }
+ */
 function normalizeAuthResponse(resData: AuthResponse) {
-  // Try common token field names
   const token =
     resData.token ||
     resData.accessToken ||
@@ -31,7 +35,7 @@ function normalizeAuthResponse(resData: AuthResponse) {
   const user = resData.user || resData?.data?.user || undefined;
 
   if (!token) {
-    console.warn("⚠️ auth.ts: No token found in response:", resData);
+    console.warn("auth.ts: No token found in response:", resData);
   }
 
   return { token, user };
