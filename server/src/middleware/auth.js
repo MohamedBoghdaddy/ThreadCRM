@@ -4,16 +4,23 @@ import User from "../models/User.js";
 
 /**
  * ThreadCRM Auth Middleware
- * - Accepts Bearer token OR cookie token
- * - Loads full user from DB (excluding password)
- * - Attaches req.user + req.token
+ * - Reads JWT from Authorization: Bearer <token> or cookie
+ * - Supports token payload: userId | id | _id
+ * - Loads user document (without password)
  */
 export const auth = asyncHandler(async (req, res, next) => {
   const authHeader = req.headers.authorization || "";
+  let token = null;
 
-  const token =
-    (authHeader.startsWith("Bearer ") && authHeader.slice(7).trim()) ||
-    req.cookies?.token;
+  // 1) Bearer token
+  if (authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7).trim();
+  }
+
+  // 2) Cookie fallback
+  if (!token && req.cookies?.token) {
+    token = req.cookies.token;
+  }
 
   if (!token) {
     res.status(401);
@@ -28,24 +35,28 @@ export const auth = asyncHandler(async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // ThreadCRM: your token should include user id (id or _id)
-    const userId = decoded.id || decoded._id;
+    // 🔥 FIX — support all possible token field names
+    const userId = decoded.userId || decoded.id || decoded._id;
+
     if (!userId) {
       res.status(401);
       throw new Error("Invalid token payload: missing user id");
     }
 
     const user = await User.findById(userId).select("-password");
+
     if (!user) {
       res.status(401);
       throw new Error("User not found");
     }
 
+    // Attach
     req.user = user;
     req.token = token;
 
     next();
   } catch (err) {
+    console.error("JWT Error:", err.message);
     res.status(401);
 
     if (err.name === "TokenExpiredError") {
@@ -57,23 +68,17 @@ export const auth = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Role-based authorization (optional)
- * Usage:
- *   router.post("/admin-only", auth, authorizeRoles("admin"))
+ * Role-based authorization helper
  */
 export const authorizeRoles = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
+      return res.status(401).json({ message: "Authentication required" });
     }
 
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
-        success: false,
-        message: `Access denied. Required role(s): ${roles.join(", ")}`,
+        message: `Access denied — requires: ${roles.join(", ")}`,
         yourRole: req.user.role,
       });
     }
@@ -82,5 +87,4 @@ export const authorizeRoles = (...roles) => {
   };
 };
 
-// Common shortcut for ThreadCRM
 export const adminOnly = authorizeRoles("admin");
